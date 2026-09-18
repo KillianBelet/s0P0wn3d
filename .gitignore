@@ -1,0 +1,9 @@
+*.exe
+*.o
+*.obj
+*.dll
+__pycache__/
+*.key
+*.pem
+.env
+.vscode/
