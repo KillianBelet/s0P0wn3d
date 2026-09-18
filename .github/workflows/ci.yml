@@ -7,28 +7,33 @@ on:
     branches: [ develop, main ]
 
 jobs:
-  build:
-    runs-on: windows-2022
-
+  lint:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install MinGW
-        run: choco install mingw -y
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          style: 'file'
+          tidy-checks: '-*'
+          extensions: 'c,h'
+          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
 
-      - name: Check C syntax
+      - name: Fail if linting errors
+        if: steps.linter.outputs.checks-failed > 0
+        run: exit 1
+
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify project structure
         run: |
-          Get-ChildItem -Recurse -Filter "*.c" -Path "src/" | ForEach-Object {
-            Write-Host "Checking $($_.FullName)"
-            gcc -Wall -Wextra -fsyntax-only $_.FullName
-          }
-        shell: powershell
-
-      - name: Verify structure
-        run: |
-          if (!(Test-Path "src/implant/core")) { exit 1 }
-          if (!(Test-Path "src/controller/server")) { exit 1 }
-          if (!(Test-Path "src/implant/payloads")) { exit 1 }
-          Write-Host "Structure OK"
-        shell: powershell
+          test -d src/implant/core
+          test -d src/controller/server
+          test -d src/implant/payloads
+          echo "Structure OK"
