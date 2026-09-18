@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop, feature/** ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          style: 'file'
+          tidy-checks: '-*'
+          extensions: 'c,h'
+          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
+
+      - name: Fail if linting errors
+        if: steps.linter.outputs.checks-failed > 0
+        run: exit 1
+
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify project structure
+        run: |
+          test -d src/implant/core
+          test -d src/controller/server
+          test -d src/implant/payloads
+          echo "Structure OK"
