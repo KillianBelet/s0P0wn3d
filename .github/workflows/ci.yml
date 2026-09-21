@@ -2,9 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [ develop, feature/** ]
+    branches: [ develop, feature/**, feat/** ]
   pull_request:
     branches: [ develop, main ]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
 
 jobs:
   lint:
@@ -30,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Verify project structure
         run: |
           test -d src/implant/core
