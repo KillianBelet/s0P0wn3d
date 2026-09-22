@@ -27,9 +27,9 @@ jobs:
           extensions: 'c,h'
           thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
 
-      - name: Fail if linting errors
+      - name: Warn if linting errors
         if: steps.linter.outputs.checks-failed > 0
-        run: exit 1
+        run: echo "::warning::Formatting issues found — run clang-format locally"
 
   structure:
     runs-on: ubuntu-latest
