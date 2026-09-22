@@ -1,9 +1,34 @@
+# Build artifacts
 *.exe
 *.o
 *.obj
 *.dll
+*.a
+*.lib
+
+# Python
 __pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
 *.key
 *.pem
+*.crt
 .env
-.vscode/
+credentials.json
+
+# Lab captures
+*.pcap
+*.pcapng
+
+# Temp
+*.tmp
+temp/
+*.pdf

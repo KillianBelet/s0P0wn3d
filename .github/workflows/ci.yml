@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop, feature/**, feat/** ]
+  pull_request:
+    branches: [ develop, main ]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cpp-linter/cpp-linter-action@v2
+        id: linter
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          style: 'file'
+          tidy-checks: '-*'
+          extensions: 'c,h'
+          thread-comments: ${{ github.event_name == 'pull_request' && 'update' }}
+
+      - name: Warn if linting errors
+        if: steps.linter.outputs.checks-failed > 0
+        run: echo "::warning::Formatting issues found — run clang-format locally"
+
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify project structure
+        run: |
+          test -d src/implant/core
+          test -d src/controller/server
+          test -d src/implant/payloads
+          echo "Structure OK"
