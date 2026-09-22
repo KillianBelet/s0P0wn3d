@@ -1,0 +1,4 @@
+# Bibliothèque cryptographique bas niveau (wrapping OpenSSL/BoringSSL)
+# Utilisée pour : RSA-2048 key gen, RSA-OAEP-SHA256, AES-256-CBC
+# Installation : pip install cryptography
+cryptography>=42.0.0
