@@ -55,7 +55,7 @@ int cfg_port(void);
  * Le typedef permet d'écrire "tls_conn" au lieu de "struct tls_conn". */
 typedef struct tls_conn tls_conn;
 
-int  tls_init(void);    /* 0 si OK ; à appeler une fois au démarrage (démarre Winsock) */
+int tls_init(void);     /* 0 si OK ; à appeler une fois au démarrage (démarre Winsock) */
 void tls_cleanup(void); /* à appeler une fois à la fin (arrête Winsock) */
 
 /* Client : se connecte à ip:port, vérifie le certificat du serveur
