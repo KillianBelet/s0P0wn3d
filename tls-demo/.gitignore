@@ -1,0 +1,19 @@
+# Clés privées et certificats — NE JAMAIS publier
+certs/
+*.key
+*.crt
+*.pem
+
+# Configuration locale (on garde .env.example comme modèle)
+.env
+
+# Binaires et artefacts de compilation
+*.exe
+*.dll
+*.obj
+*.exp
+*.lib
+*.pdb
+
+# Paquets (peuvent embarquer des clés)
+*.zip
