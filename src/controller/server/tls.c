@@ -38,6 +38,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <openssl/x509v3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -224,7 +225,13 @@ tls_conn *tls_connect(const char *ip, int port) {
     if (!c->ctx) goto fail;
 
     c->ssl = SSL_new(c->ctx);
-    if (!c->ssl || SSL_set1_ipaddr(c->ssl, ip) != 1) {
+    if (!c->ssl) {
+        ERR_print_errors_fp(stderr); goto fail;
+    }
+    /* Indique au client l'IP/hostname attendu dans le certificat serveur.
+     * SSL_set1_host (OpenSSL >= 1.1.0) est portable et disponible sur Linux. */
+    SSL_set_hostflags(c->ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+    if (SSL_set1_host(c->ssl, ip) != 1) {
         ERR_print_errors_fp(stderr); goto fail;
     }
 
