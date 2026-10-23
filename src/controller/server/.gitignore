@@ -1,0 +1,14 @@
+# Binaires compilés
+c2_server
+implant.exe
+*.o
+*.obj
+
+# Certificats et clés privées (ne JAMAIS committer)
+certs/*.key
+certs/*.crt
+certs/*.srl
+certs/
+
+# Fichier de config local
+.env
