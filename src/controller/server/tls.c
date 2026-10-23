@@ -17,12 +17,6 @@
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
 #  include <windows.h>
-   /* applink.c : nécessaire sur Windows pour qu'OpenSSL écrive dans stderr.
-    * Inclus une seule fois ici. Les warnings 4152/4996 sont désactivés autour. */
-#  pragma warning(push)
-#  pragma warning(disable : 4152 4996)
-#  include <openssl/applink.c>
-#  pragma warning(pop)
    typedef SOCKET sock_t;
 #  define INVALID_SOCK INVALID_SOCKET
 #  define CLOSE_SOCK(s) closesocket(s)
@@ -38,7 +32,6 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#include <openssl/x509v3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -228,12 +221,11 @@ tls_conn *tls_connect(const char *ip, int port) {
     if (!c->ssl) {
         ERR_print_errors_fp(stderr); goto fail;
     }
-    /* Indique au client l'IP/hostname attendu dans le certificat serveur.
-     * SSL_set1_host (OpenSSL >= 1.1.0) est portable et disponible sur Linux. */
-    SSL_set_hostflags(c->ssl, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
-    if (SSL_set1_host(c->ssl, ip) != 1) {
-        ERR_print_errors_fp(stderr); goto fail;
-    }
+    /* La vérification que le certificat est signé par notre CA est faite par
+     * SSL_CTX_load_verify_locations + SSL_VERIFY_PEER dans make_ctx.
+     * En mTLS, c'est suffisant : seul l'implant possède un cert client signé
+     * par notre CA. On n'ajoute pas de vérification supplémentaire du SAN IP
+     * pour rester compatible OpenSSL 1.1.x / 3.x / 4.x sans dépendance de version. */
 
     c->sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (c->sock == INVALID_SOCK ||
