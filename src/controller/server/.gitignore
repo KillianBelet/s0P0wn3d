@@ -12,3 +12,7 @@ certs/
 
 # Fichier de config local
 .env
+
+# OpenSSL compilé pour Windows (généré par setup-openssl-win.sh)
+# Ne pas committer : trop lourd et spécifique à la machine de build
+third_party/
