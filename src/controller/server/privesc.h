@@ -1,28 +1,21 @@
 /*
- * privesc.h — Privilege escalation via PrintNightmare LPE
+ * privesc.h — UAC Bypass via fodhelper.exe (T1548.002)
  *
- * Exploits CVE-2021-1675 / CVE-2021-34527 to load a DLL
- * as SYSTEM through the Windows Print Spooler service.
+ * Bypasses User Account Control by hijacking the auto-elevate
+ * mechanism of fodhelper.exe through registry manipulation.
  *
- * MITRE ATT&CK : T1068 — Exploitation for Privilege Escalation
+ * MITRE ATT&CK : T1548.002 — Abuse Elevation Control Mechanism: Bypass UAC
  */
 
 #ifndef PRIVESC_H
 #define PRIVESC_H
 
 /*
- * Exploit PrintNightmare LPE to load dll_path as SYSTEM.
+ * privesc_uac_bypass — Lance un exécutable avec élévation via fodhelper.exe.
  *
- * The DLL is copied into the Spooler driver directory and loaded
- * by the Print Spooler service (running as SYSTEM).
- *
- * dll_path must point to an existing DLL on the target filesystem.
- *
- * Returns 0 on success, negative on error:
- *   -1  DLL not found
- *   -2  could not locate a valid print driver (UNIDRV.DLL)
- *   -3  AddPrinterDriverExA failed (Spooler patched or stopped)
+ * @param exe_path  Chemin de l'exécutable à lancer en admin
+ * @return  0 = succès, -1 = erreur registre, -2 = échec lancement fodhelper
  */
-int privesc_printnightmare(const char *dll_path);
+int privesc_uac_bypass(const char *exe_path);
 
 #endif /* PRIVESC_H */
