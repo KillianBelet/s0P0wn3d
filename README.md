@@ -58,15 +58,17 @@ s0P0wn3d/
 │   │   ├── gen-certs.sh          — génère les certificats mTLS
 │   │   ├── gen-embed.sh          — génère embedded_certs.h (mode standalone)
 │   │   └── setup-openssl-win.sh  — setup OpenSSL pour MSYS2
-│   └── implant/                 ← code de l'implant (Windows)
-│       ├── implant.c             — implant principal (reverse shell, elevate, ps)
-│       ├── privesc.c             — UAC bypass via fodhelper.exe
-│       └── privesc.h             — header privesc
+│   └── implant/
+│       ├── core/                ← code de l'implant (Windows)
+│       │   ├── implant.c         — implant principal (reverse shell, elevate, ps)
+│       │   ├── privesc.c         — UAC bypass via fodhelper.exe
+│       │   └── privesc.h         — header privesc
+│       └── payloads/            ← payloads additionnels (à venir)
 ├── docs/                        ← preuves de chiffrement (pcap)
 └── README.md
 ```
 
-> **Note** : le Makefile est dans `src/controller/server/` et référence les sources de l'implant via le chemin relatif `../../implant`. Toutes les commandes `make` se lancent depuis `src/controller/server/`.
+> **Note** : le Makefile est dans `src/controller/server/` et référence les sources de l'implant via le chemin relatif `../../implant/core`. Toutes les commandes `make` se lancent depuis `src/controller/server/`.
 
 ---
 

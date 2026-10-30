@@ -2,7 +2,7 @@
 #
 # ── Arborescence ──────────────────────────────────────────────────────────────
 #   src/controller/server/   → C2 server (c2_server.c) + TLS partagé (tls.c/h)
-#   src/implant/             → Implant (implant.c) + privesc (privesc.c/h)
+#   src/implant/core/        → Implant (implant.c) + privesc (privesc.c/h)
 #
 # ── Prérequis ──────────────────────────────────────────────────────────────────
 #   C2 Ubuntu : sudo apt install gcc libssl-dev openssl -y
@@ -24,7 +24,7 @@ C2_IP   ?= 192.168.56.101
 C2_PORT ?= 4444
 
 # Chemin relatif vers les sources de l'implant
-IMPLANT_DIR = ../../implant
+IMPLANT_DIR = ../../implant/core
 
 # Libs Windows communes à l'implant
 WIN_LIBS = -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lshell32
