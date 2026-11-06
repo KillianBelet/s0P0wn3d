@@ -35,8 +35,22 @@ void tls_cleanup(void);  /* à appeler une fois à la fin                      *
 /* Client : se connecte à ip:port, vérifie le certificat serveur (mTLS).   */
 tls_conn *tls_connect(const char *ip, int port);
 
+#ifdef EMBED_CERTS
+/* Client (standalone) : certs chargés depuis la mémoire, zéro fichier.    */
+tls_conn *tls_connect_embedded(const char *ip, int port,
+                               const unsigned char *ca, int ca_len,
+                               const unsigned char *cert, int cert_len,
+                               const unsigned char *key, int key_len);
+#endif
+
 /* Serveur : écoute sur ip:port, accepte UN client (mTLS).                 */
 tls_conn *tls_accept_one(const char *ip, int port);
+
+/* Serveur : renvoie le fd brut du listener (pour select/poll multi-client). */
+int tls_listen(const char *ip, int port);
+
+/* Serveur : accepte une connexion sur le listener fd, retourne tls_conn.  */
+tls_conn *tls_accept_on(int listener_fd);
 
 /* Envoie / reçoit des octets chiffrés. Retour : nb octets, ou <= 0 si erreur. */
 int tls_send(tls_conn *c, const void *data, int len);
