@@ -33,7 +33,7 @@
 | 2 | Authentification mutuelle (certificats X.509) | ✅ Fonctionnel |
 | 2 | Preuve de chiffrement (tcpdump/Wireshark) | ✅ Validé |
 | 2 | C2 server en C (remplacement Python) | ✅ Fonctionnel |
-| 2 | Persistance (Registry Run Key T1547.001) | 📋 À réimplémenter |
+| 2 | Persistance (Registry Run Key T1547.001) | ✅ Fonctionnel |
 | 2 | C2 multi-client (sessions simultanées, pthreads) | ✅ Fonctionnel |
 | 2 | Exécution PowerShell (T1059.001) | ✅ Fonctionnel |
 | 2 | UAC Bypass — fodhelper.exe (T1548.002) | ✅ Fonctionnel |
@@ -63,7 +63,9 @@ s0P0wn3d/
 │       │   ├── implant.c         — implant principal (reverse shell, elevate, ps)
 │       │   ├── privesc.c         — UAC bypass via fodhelper.exe
 │       │   └── privesc.h         — header privesc
-│       └── payloads/            ← payloads additionnels (à venir)
+│       └── payloads/            ← modules additionnels
+│           ├── persist.c         — persistance Registry Run Key (HKCU)
+│           └── persist.h         — header persistance
 ├── docs/                        ← preuves de chiffrement (pcap)
 └── README.md
 ```
@@ -269,6 +271,9 @@ desktop-target\user
 | `ps <commande>` | Exécutée via PowerShell |
 | `elevate` | UAC bypass : lance une session admin (voir section ci-dessous) |
 | `privesc <path>` | UAC bypass manuel : lance un exe spécifié en admin via fodhelper |
+| `persist_install` | Installe la persistance (Registry Run Key HKCU) |
+| `persist_remove` | Supprime la persistance |
+| `persist_status` | Vérifie si la persistance est active |
 | `bg` / `background` | Retour au menu principal sans fermer la session |
 | `close` | Ferme la session (kill l'implant) et retour au menu |
 | `exit` | Envoie 'exit' à l'implant (il s'arrête définitivement) |
@@ -442,20 +447,19 @@ strings ~/traffic_mtls.pcap | grep -iE "(whoami|target|windows|cmd)"
 
 ## Persistance
 
-> **Statut : à réimplémenter.** Le mécanisme de persistance était présent dans l'ancien implant (Phase 1) mais n'a pas encore été porté dans l'implant actuel (Phase 2). Le principe reste le même.
+### Mécanisme — Registry Run Key (T1547.001)
 
-### Mécanisme prévu — Registry Run Key (T1547.001)
-
-L'implant doit s'installer dans la clé de registre **HKCU Run** au premier lancement :
+L'implant s'installe dans la clé de registre **HKCU Run** via la commande `persist_install` :
 
 ```
 HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
-    "WindowsUpdate" = "C:\chemin\implant.exe"
+    "WinUpdate" = "C:\chemin\implant.exe"
 ```
 
 - **Portée** : utilisateur courant (`HKCU`) — pas besoin de droits admin
 - **Déclencheur** : à chaque ouverture de session Windows
-- **Clé utilisée** : `WindowsUpdate` (nom générique pour passer inaperçu)
+- **Clé utilisée** : `WinUpdate` (nom générique pour passer inaperçu)
+- **Commandes C2** : `persist_install`, `persist_remove`, `persist_status`
 
 ### Détection (Blue Team)
 
@@ -479,12 +483,12 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 | **Canal C2 mTLS** | Command and Control | Encrypted Channel — Symmetric Cryptography | T1573.001 | Connexion TLSv1.3 sortante persistante vers port 4444. Règle réseau : bloquer les connexions sortantes non whitelistées. Certificats clients comme IOC. |
 | **Implant sans fenêtre** | Defense Evasion | Masquerading | T1036 | Processus sans fenêtre visible (`-mwindows`). Sysmon Event ID 1 : détecter les processus sans parent interactif. |
 | **UAC Bypass fodhelper** | Privilege Escalation | Bypass User Account Control | T1548.002 | Surveiller les écritures sur `HKCU\...\ms-settings\Shell\Open\command`. Sysmon Event ID 13. Détecter `fodhelper.exe` avec `ParentImage` inhabituel. |
+| **Persistance Registry Run Key** | Persistence | Registry Run Keys / Startup Folder | T1547.001 | Surveiller `HKCU\...\Run`. Event ID 4657 ou Sysmon Event ID 13. Valeur "WinUpdate" comme IOC. |
 
 ### Capacités planifiées
 
 | Capacité | Tactic | Technique | ID | Blue Team Note |
 |----------|--------|-----------|-----|----------------|
-| **Persistance Registry Run Key** | Persistence | Registry Run Keys / Startup Folder | T1547.001 | Surveiller `HKCU\...\Run`. Event ID 4657 ou Sysmon Event ID 13. À réimplémenter dans l'implant actuel. |
 | **Keylogger** | Collection | Keylogging | T1056.001 | Hook clavier via `SetWindowsHookEx(WH_KEYBOARD_LL)`. Sysmon Event ID 10. Antivirus comportemental. |
 | **Loot (exfiltration)** | Collection / Exfiltration | Data from Local System | T1005 | Surveiller les accès aux fichiers sensibles (`SAM`, `.ssh/`). Event ID 4663. |
 | **Privesc (autres vecteurs)** | Privilege Escalation | Exploitation for Privilege Escalation | T1068 | Auditer les misconfigurations locales. Event ID 4672. |
@@ -498,7 +502,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 |-----------|--------------|--------|
 | IP C2 hardcodée à la compilation | Reverse engineering (`strings implant.exe`) | Phase 3 : chiffrement des strings |
 | `cmd.exe` visible dans la liste des process | Task Manager / Sysmon | Phase 3 : built-in shell sans spawner cmd.exe |
-| Clé de registre avec nom générique | Autoruns / Sysmon Event ID 13 | À réimplémenter — amélioration prévue (nom aléatoire) |
+| Clé de registre avec nom générique ("WinUpdate") | Autoruns / Sysmon Event ID 13 | Accepté — amélioration prévue Phase 3 (nom aléatoire) |
 | Certificats clients comme IOC | Extraction depuis binaire ou réseau | Phase 3 : rotation de certificats |
 | Pas d'obfuscation du binaire | Signatures AV statiques | Phase 3 : XOR string obfuscation, packer |
  
