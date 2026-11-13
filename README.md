@@ -41,7 +41,8 @@
 | 2 | Implant standalone (certificats embarqués, zéro dépendance) | ✅ Fonctionnel |
 | 3 | AV evasion (obfuscation strings) | 📋 Planifié |
 | 3 | Log rollback | 📋 Planifié |
-| 3 | Payloads avancés (loot, keylog) | 📋 Planifié |
+| 2 | Keylogger (T1056.001) — hook clavier, buffer in-memory | ✅ Fonctionnel |
+| 3 | Payloads avancés (loot) | 📋 Planifié |
  
 ---
 
@@ -60,9 +61,11 @@ s0P0wn3d/
 │   │   └── setup-openssl-win.sh  — setup OpenSSL pour MSYS2
 │   └── implant/
 │       ├── core/                ← code de l'implant (Windows)
-│       │   ├── implant.c         — implant principal (reverse shell, elevate, ps)
+│       │   ├── implant.c         — implant principal (reverse shell, elevate, ps, keylog)
 │       │   ├── privesc.c         — UAC bypass via fodhelper.exe
-│       │   └── privesc.h         — header privesc
+│       │   ├── privesc.h         — header privesc
+│       │   ├── keylog.c          — keylogger (hook clavier, buffer in-memory)
+│       │   └── keylog.h          — header keylogger
 │       └── payloads/            ← payloads additionnels (à venir)
 ├── docs/                        ← preuves de chiffrement (pcap)
 └── README.md
@@ -269,6 +272,9 @@ desktop-target\user
 | `ps <commande>` | Exécutée via PowerShell |
 | `elevate` | UAC bypass : lance une session admin (voir section ci-dessous) |
 | `privesc <path>` | UAC bypass manuel : lance un exe spécifié en admin via fodhelper |
+| `keylog_start` | Démarre le keylogger (hook clavier, capture en mémoire) |
+| `keylog_stop` | Arrête le keylogger |
+| `keylog_dump` | Récupère les frappes capturées et vide le buffer |
 | `bg` / `background` | Retour au menu principal sans fermer la session |
 | `close` | Ferme la session (kill l'implant) et retour au menu |
 | `exit` | Envoie 'exit' à l'implant (il s'arrête définitivement) |
@@ -479,13 +485,13 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 | **Canal C2 mTLS** | Command and Control | Encrypted Channel — Symmetric Cryptography | T1573.001 | Connexion TLSv1.3 sortante persistante vers port 4444. Règle réseau : bloquer les connexions sortantes non whitelistées. Certificats clients comme IOC. |
 | **Implant sans fenêtre** | Defense Evasion | Masquerading | T1036 | Processus sans fenêtre visible (`-mwindows`). Sysmon Event ID 1 : détecter les processus sans parent interactif. |
 | **UAC Bypass fodhelper** | Privilege Escalation | Bypass User Account Control | T1548.002 | Surveiller les écritures sur `HKCU\...\ms-settings\Shell\Open\command`. Sysmon Event ID 13. Détecter `fodhelper.exe` avec `ParentImage` inhabituel. |
+| **Keylogger** | Collection | Input Capture: Keylogging | T1056.001 | Hook clavier via `SetWindowsHookExA(WH_KEYBOARD_LL)`. Buffer in-memory (pas d'I/O disque). Sysmon Event ID 10. Antivirus comportemental. |
 
 ### Capacités planifiées
 
 | Capacité | Tactic | Technique | ID | Blue Team Note |
 |----------|--------|-----------|-----|----------------|
 | **Persistance Registry Run Key** | Persistence | Registry Run Keys / Startup Folder | T1547.001 | Surveiller `HKCU\...\Run`. Event ID 4657 ou Sysmon Event ID 13. À réimplémenter dans l'implant actuel. |
-| **Keylogger** | Collection | Keylogging | T1056.001 | Hook clavier via `SetWindowsHookEx(WH_KEYBOARD_LL)`. Sysmon Event ID 10. Antivirus comportemental. |
 | **Loot (exfiltration)** | Collection / Exfiltration | Data from Local System | T1005 | Surveiller les accès aux fichiers sensibles (`SAM`, `.ssh/`). Event ID 4663. |
 | **Privesc (autres vecteurs)** | Privilege Escalation | Exploitation for Privilege Escalation | T1068 | Auditer les misconfigurations locales. Event ID 4672. |
 | **AV evasion** | Defense Evasion | Obfuscated Files or Information | T1027 | XOR string obfuscation, packer. |
@@ -533,6 +539,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 - [T1573.001 — Symmetric Cryptography](https://attack.mitre.org/techniques/T1573/001/)
 - [T1548.002 — Bypass User Account Control](https://attack.mitre.org/techniques/T1548/002/)
 - [T1036 — Masquerading](https://attack.mitre.org/techniques/T1036/)
+- [T1056.001 — Input Capture: Keylogging](https://attack.mitre.org/techniques/T1056/001/)
 - [T1547.001 — Registry Run Keys](https://attack.mitre.org/techniques/T1547/001/) _(planifié)_
 ### UAC Bypass
 - [fodhelper.exe UAC Bypass — Pentestlab](https://pentestlab.blog/2017/06/07/uac-bypass-fodhelper/)

