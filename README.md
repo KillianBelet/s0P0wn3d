@@ -274,6 +274,7 @@ desktop-target\user
 | `persist_install` | Installe la persistance (Registry Run Key HKCU) |
 | `persist_remove` | Supprime la persistance |
 | `persist_status` | Vérifie si la persistance est active |
+| `screenshot [path]` | Capture d'écran de la cible en PNG (T1113). Path optionnel, défaut `%TEMP%\shot.png`. Le PNG est écrit sur la cible, le C2 n'affiche que le chemin |
 | `bg` / `background` | Retour au menu principal sans fermer la session |
 | `close` | Ferme la session (kill l'implant) et retour au menu |
 | `exit` | Envoie 'exit' à l'implant (il s'arrête définitivement) |
@@ -472,6 +473,32 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
  
 ---
 
+## Capture d'écran (T1113)
+
+L'implant capture l'écran virtuel complet (multi-moniteurs inclus) et l'encode
+en **PNG** directement sur la cible, via GDI (BitBlt) + GDI+ (encodeur PNG) —
+aucun processus externe spawné, aucun outil tiers requis.
+
+```
+[S0]> screenshot
+[screenshot] saved C:\Users\user\AppData\Local\Temp\shot.png (1920x1200, 1119604 bytes) — MITRE T1113
+```
+
+- **Commande** : `screenshot [path]` — le path est optionnel (défaut `%TEMP%\shot.png`)
+- **Écran capturé** : écran virtuel complet (`SM_CX/CYVIRTUALSCREEN`), fenêtres superposées incluses (`CAPTUREBLT`)
+- **Réseau** : le PNG reste sur la cible — seule une ligne de texte (chemin, dimensions, taille) revient sur le canal C2, qui n'est pas conçu pour transporter des binaires
+- **Récupération** : via les moyens existants (`sh cat`, exfiltration dédiée)
+
+### Détection (Blue Team)
+
+| Indicateur | Description |
+|-----------|-------------|
+| Accès au DC de l'écran | `GetDC(NULL)` + `BitBlt` : pas d'API auditable dédiée, mais outils de DLP / screen-capture protection le bloquent |
+| Fichier PNG dans %TEMP% | Surveillance de `%TEMP%\*.png` créé par un process sans fenêtre |
+| `GdiplusStartup` | Chargement de gdiplus.dll par un process inhabituel (Sysmon Event ID 7, module load) |
+
+---
+
 ## MITRE ATT&CK
 
 ### Capacités implémentées
@@ -484,6 +511,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 | **Implant sans fenêtre** | Defense Evasion | Masquerading | T1036 | Processus sans fenêtre visible (`-mwindows`). Sysmon Event ID 1 : détecter les processus sans parent interactif. |
 | **UAC Bypass fodhelper** | Privilege Escalation | Bypass User Account Control | T1548.002 | Surveiller les écritures sur `HKCU\...\ms-settings\Shell\Open\command`. Sysmon Event ID 13. Détecter `fodhelper.exe` avec `ParentImage` inhabituel. |
 | **Persistance Registry Run Key** | Persistence | Registry Run Keys / Startup Folder | T1547.001 | Surveiller `HKCU\...\Run`. Event ID 4657 ou Sysmon Event ID 13. Valeur "WinUpdate" comme IOC. |
+| **Capture d'écran** | Collection | Screen Capture | T1113 | BitBlt + GDI+ PNG en-process (aucun process enfant). Surveillance `%TEMP%\*.png`, DLP screen-capture protection. | Surveiller `HKCU\...\Run`. Event ID 4657 ou Sysmon Event ID 13. Valeur "WinUpdate" comme IOC. |
 
 ### Capacités planifiées
 
@@ -538,6 +566,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
 - [T1548.002 — Bypass User Account Control](https://attack.mitre.org/techniques/T1548/002/)
 - [T1036 — Masquerading](https://attack.mitre.org/techniques/T1036/)
 - [T1547.001 — Registry Run Keys](https://attack.mitre.org/techniques/T1547/001/) _(planifié)_
+- [T1113 — Screen Capture](https://attack.mitre.org/techniques/T1113/)
 ### UAC Bypass
 - [fodhelper.exe UAC Bypass — Pentestlab](https://pentestlab.blog/2017/06/07/uac-bypass-fodhelper/)
 - [ShellExecuteExA — Win32 API](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecuteexa)
